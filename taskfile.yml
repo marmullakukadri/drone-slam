@@ -1,0 +1,244 @@
+# Drone SLAM – komandat e projektit (https://taskfile.dev)
+# Ekzekutohen në Mac; ROS 2 / Gazebo / RTAB-Map punojnë brenda kontejnerit Docker.
+#
+#   task                       lista e komandave
+#   task start MAP=dhoma1      hartë e re
+#   task fluturo               tastiera
+#   task ruaj                  ruan hartën (map.pcd + map.pgm)
+#   task ndal                  ndal gjithçka
+version: '3'
+
+silent: true
+
+vars:
+  C: drone-slam-dev
+  ROS: source /opt/ros/jazzy/setup.bash && source /workspace/install/setup.bash
+  SIM_LOG: /tmp/drone_sim.log
+  URL: http://localhost:6080/vnc.html?autoconnect=true&resize=scale
+  # Harta e fundit e nisur me "task start" / "task lokalizim" (MAP=... e ndryshon)
+  CURRENT_MAP:
+    sh: cat maps/.current 2>/dev/null || echo dhoma1
+
+tasks:
+  default:
+    desc: Lista e komandave
+    cmds:
+      - task --list
+
+  # ------------------------------------------------------------------ simulimi
+  start:
+    desc: "Hartë e re: Gazebo + RViz + SLAM, hap shfletuesin        (task start MAP=dhoma1)"
+    vars:
+      M: '{{.MAP | default "dhoma1"}}'
+    cmds:
+      - |
+        if [ -d "maps/{{.M}}" ]; then
+          backup="maps/{{.M}}_$(date +%Y%m%d_%H%M%S)"
+          mv "maps/{{.M}}" "$backup"
+          echo "ℹ Harta e vjetër u ruajt si $backup"
+        fi
+        mkdir -p maps && echo "{{.M}}" > maps/.current
+      - task: _prepare
+      - task: _launch
+        vars: { ARGS: "mode:=mapping map_name:={{.M}}" }
+      - |
+        echo ""
+        echo "  Harta:   maps/{{.M}}/   (Gazebo + RViz në shfletues)"
+        echo "  Tani:    task fluturo"
+        echo "  Pastaj:  task ruaj"
+        echo "  Fund:    task ndal"
+
+  # Gjithmonë harta "shtepia"; droni del në fillim të korridorit (x=-6.5, y=-0.6,
+  # i kthyer nga korridori). Initial pose i jepet RTAB-Map-it vetë (initial_pose.py).
+  lokalizim:
+    desc: "Harta shtepia, droni në fillim të korridorit (initial pose vetë); RViz: 2D Goal Pose"
+    vars:
+      M: '{{.MAP | default "shtepia"}}'
+      SX: '{{.X | default "-6.5"}}'
+      SY: '{{.Y | default "-0.6"}}'
+      SYAW: '{{.YAW | default "0.0"}}'
+    preconditions:
+      - sh: test -f "maps/{{.M}}/rtabmap.db"
+        msg: "Nuk ka hartë për lokalizim te maps/{{.M}}/ — bëni: task start MAP={{.M}}, task ruaj, task ndal"
+    cmds:
+      - echo "{{.M}}" > maps/.current
+      - task: _prepare
+      - task: _launch
+        vars:
+          ARGS: >-
+            mode:=localization map_name:={{.M}}
+            spawn_x:={{.SX}} spawn_y:={{.SY}} spawn_yaw:={{.SYAW}}
+      - |
+        echo ""
+        echo "  Lokalizim në maps/{{.M}}/ – droni është te x={{.SX}} y={{.SY}} (fillimi i korridorit)"
+        echo "  Initial pose jepet vetë – në RViz 'SLAM' del mbi 'Droni (Gazebo)'"
+        echo "  RViz '2D Goal Pose': klikoni ku të shkojë (ngrihet dhe shkon vetë)"
+        echo "  (vetëm nëse 'SLAM' largohet nga 'Droni (Gazebo)': '2D Pose Estimate' mbi dronin cian)"
+        echo "  Fund: task ndal"
+
+  demo:
+    desc: Droni fluturon vetë 9 pika dhe ndërton maps/demo
+    cmds:
+      - echo demo > maps/.current
+      - task: _prepare
+      - task: _launch
+        vars: { ARGS: "mode:=demo" }
+      - echo "✔ Droni po fluturon vetë. Fund – task ndal"
+
+  ndal:
+    desc: Ndal simulimin dhe kontejnerin (RTAB-Map ruan rtabmap.db)
+    cmds:
+      - |
+        if [ -n "$(docker ps -q -f name=^{{.C}}$ -f status=running)" ]; then
+          echo "▶ Ndal simulimin"
+          docker exec {{.C}} bash /workspace/src/drone_slam/scripts/stop_sim.sh >/dev/null
+          docker exec {{.C}} bash /workspace/src/drone_slam/scripts/start_vnc.sh stop >/dev/null
+          echo "▶ Ndal kontejnerin"
+          docker stop {{.C}} >/dev/null
+        fi
+        pkill -f "caffeinate -dims" || true
+        echo "✔ Gjithçka u ndal"
+
+  # ------------------------------------------------------------------ droni
+  fluturo:
+    desc: "Tastiera në shfletues (disa taste njëkohësisht): shigjetat, u/d, q/e"
+    preconditions:
+      - sh: docker exec {{.C}} pgrep -f "ros2 launch drone_slam" >/dev/null 2>&1
+        msg: "Simulimi nuk po punon. Nisni me: task start"
+    cmds:
+      - docker exec {{.C}} pkill -f drone_teleop.py || true
+      - docker exec -d -e DISPLAY=:1 {{.C}} bash -c "{{.ROS}} && exec ros2 run drone_slam drone_teleop.py > /tmp/drone_teleop.log 2>&1"
+      - open '{{.URL}}'
+      - |
+        echo "✔ Dritarja 'Tastiera e dronit' u hap në shfletues (poshtë djathtas)"
+        echo "  Klikoni një herë mbi të, pastaj mbani tastet – p.sh. ↑ + q = para duke u kthyer majtas"
+
+  ngrihu:
+    desc: Droni ngrihet në 1.5 m
+    preconditions:
+      - sh: docker exec {{.C}} pgrep -f "ros2 launch drone_slam" >/dev/null 2>&1
+        msg: "Simulimi nuk po punon. Nisni me: task start"
+    cmds:
+      - |
+        docker exec {{.C}} bash -c "{{.ROS}} && ros2 topic pub --once --keep-alive 1 /drone/command std_msgs/msg/String '{data: takeoff}'" >/dev/null
+      - echo "✔ Droni po ngrihet"
+
+  ulu:
+    desc: Droni ulet
+    preconditions:
+      - sh: docker exec {{.C}} pgrep -f "ros2 launch drone_slam" >/dev/null 2>&1
+        msg: "Simulimi nuk po punon. Nisni me: task start"
+    cmds:
+      - |
+        docker exec {{.C}} bash -c "{{.ROS}} && ros2 topic pub --once --keep-alive 1 /drone/command std_msgs/msg/String '{data: land}'" >/dev/null
+      - echo "✔ Droni po ulet"
+
+  # ------------------------------------------------------------------ hartat
+  ruaj:
+    desc: "Ruaj hartën (map.pcd + map.pgm)                          (task ruaj MAP=dhoma1)"
+    vars:
+      M: '{{.MAP | default .CURRENT_MAP}}'
+    preconditions:
+      - sh: docker exec {{.C}} pgrep -f "ros2 launch drone_slam" >/dev/null 2>&1
+        msg: "Simulimi nuk po punon – harta ruhet gjatë hartografimit (task start)"
+    cmds:
+      - echo "▶ Ruaj hartën te maps/{{.M}}/"
+      - >-
+        docker exec {{.C}} bash -c "{{.ROS}} && ros2 run drone_slam map_saver.py
+        --ros-args -p output_dir:=/workspace/maps/{{.M}} 2>&1"
+        | sed -E 's/^\[[A-Z]+\] \[[0-9.]+\] \[map_saver\]: /  /'
+
+  # ------------------------------------------------------------------ mjete
+  pamja:
+    desc: Hap Gazebo + RViz në shfletues
+    cmds:
+      - open '{{.URL}}'
+
+  status:
+    desc: Gjendja e kontejnerit, simulimit dhe dronit
+    cmds:
+      - |
+        if [ -z "$(docker ps -q -f name=^{{.C}}$ -f status=running)" ]; then
+          echo "Kontejneri: i ndalur"; exit 0
+        fi
+        echo "Kontejneri: po punon"
+        if docker exec {{.C}} pgrep -f "ros2 launch drone_slam" >/dev/null 2>&1; then
+          echo "Simulimi:   po punon (harta: {{.CURRENT_MAP}})"
+          state=$(docker exec {{.C}} bash -c "{{.ROS}} && timeout 8 ros2 topic echo --once /mission/state --field data 2>/dev/null" | grep -vE '^(WARNING|---)' | head -1)
+          echo "Droni:      ${state:-(pa përgjigje)}"
+        else
+          echo "Simulimi:   i ndalur"
+        fi
+
+  log:
+    desc: Shfaq log-un e simulimit (Ctrl+C për të dalë)
+    interactive: true
+    cmds:
+      - docker exec -it {{.C}} tail -n 60 -f {{.SIM_LOG}}
+
+  build:
+    desc: Kompilo kodin ROS brenda kontejnerit
+    cmds:
+      - task: _docker
+      - bash src/drone_slam/scripts/sync_check.sh {{.C}} | tail -1
+      - docker exec {{.C}} bash -c "source /opt/ros/jazzy/setup.bash && cd /workspace && colcon build --symlink-install"
+
+  terminal:
+    desc: Hap një terminal brenda kontejnerit
+    interactive: true
+    cmds:
+      - task: _docker
+      - docker exec -it {{.C}} bash
+
+  # ------------------------------------------------------------------ hapa të brendshëm
+  _docker:
+    internal: true
+    preconditions:
+      - sh: docker info >/dev/null 2>&1
+        msg: "Docker Desktop nuk është ndezur. Hapeni dhe provoni përsëri."
+    status:
+      - test -n "$(docker ps -q -f name=^{{.C}}$ -f status=running)"
+    cmds:
+      - echo "▶ Nis kontejnerin {{.C}}"
+      - docker start {{.C}} >/dev/null
+
+  _prepare:
+    internal: true
+    cmds:
+      - task: _docker
+      - echo "▶ Ndal simulimin e mëparshëm (nëse ka)"
+      - docker exec {{.C}} bash /workspace/src/drone_slam/scripts/stop_sim.sh >/dev/null
+      - echo "▶ Kontrollo skedarët"
+      - bash src/drone_slam/scripts/sync_check.sh {{.C}} | tail -1
+      - echo "▶ Build"
+      - docker exec {{.C}} bash -c "source /opt/ros/jazzy/setup.bash && cd /workspace && colcon build --symlink-install 2>&1 | tail -1"
+      - echo "▶ Desktopi virtual (VNC)"
+      - docker exec {{.C}} bash /workspace/src/drone_slam/scripts/start_vnc.sh >/dev/null
+
+  _launch:
+    internal: true
+    requires:
+      vars: [ARGS]
+    cmds:
+      # Mac-u nuk fle gjatë simulimit: gjumi ngrin Docker-in dhe SLAM-i humbet
+      # odometrinë (harta / RViz prishen). "task ndal" e lëshon përsëri.
+      - pkill -f "caffeinate -dims" || true
+      - sh -c 'nohup caffeinate -dims >/dev/null 2>&1 &'
+      - docker exec -d -e DISPLAY=:1 {{.C}} bash -c "{{.ROS}} && exec ros2 launch drone_slam slam_sim.launch.py {{.ARGS}} > {{.SIM_LOG}} 2>&1"
+      - echo "▶ Duke pritur Gazebo + SLAM (deri në 2 min)…"
+      - |
+        for i in $(seq 1 60); do
+          sleep 2
+          if docker exec {{.C}} grep -q 'Odometry received' {{.SIM_LOG}} 2>/dev/null; then
+            echo "✔ Simulimi po punon"
+            open '{{.URL}}'
+            exit 0
+          fi
+          if docker exec {{.C}} grep -qE 'RuntimeError|process has died' {{.SIM_LOG}} 2>/dev/null; then
+            docker exec {{.C}} grep -E 'RuntimeError|process has died|ERROR' {{.SIM_LOG}} | tail -5
+            echo "✖ Simulimi dështoi (shih: task log)"
+            exit 1
+          fi
+        done
+        echo "✖ Simulimi nuk u nis në kohë (shih: task log)"
+        exit 1

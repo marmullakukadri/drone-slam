@@ -1,0 +1,50 @@
+# Mission for shtepia.sdf (the default world). Waypoints are x, y, z triples
+# in the ground-truth "world" frame (drone starts at 0,0 in the corridor).
+# Straight lines between waypoints, each door crossed through its center:
+# corridor -> N2 -> N3 -> east hall -> S3 -> S2 -> S1 -> N1 -> back to the
+# start, so RTAB-Map can close loops.
+drone_node:
+  ros__parameters:
+    use_sim_time: true
+    takeoff_altitude: 1.5
+    land_altitude: 0.10       # base_link height standing on the skids (= spawn_z)
+    prop_spin_speed: 40.0     # rad/s, propeller animation while flying
+    max_speed: 0.8            # m/s
+    max_vertical_speed: 0.25  # m/s - slow climbs: vertical walls give lidar ICP little z information
+    goal_altitude: 1.5        # m, used for RViz 2D goals
+    inflation_radius: 0.6     # m, keep-out distance from obstacles when planning (> safety_distance)
+                              #    doors are 1.6 m wide: needs < 0.7 for a path through them
+    safety_enabled: true      # block motion towards obstacles seen by the lidar
+    safety_distance: 0.55     # m (door jambs are 0.8 m away when flying through the center)
+    obstacle_min_z: 0.2       # m in map frame (~0.3 m above floor): lower points = floor
+    obstacle_max_z: 3.0
+    max_yaw_rate: 0.5         # rad/s
+    kp_xy: 0.8
+    kp_z: 1.0
+    kp_yaw: 1.2
+    waypoint_tolerance: 0.3
+    face_travel_direction: true
+    start_delay: 5.0          # s after first odometry (lets SLAM initialise)
+    loop_mission: false
+    auto_land: true
+    teleop_timeout: 1.0
+    control_rate: 20.0
+    waypoints: [
+       5.5,  0.0, 1.5,    # corridor
+       5.5,  6.0, 1.5,    # room N2
+       5.5,  0.0, 1.5,
+      13.0,  0.0, 1.5,
+      13.0,  7.0, 1.5,    # room N3
+      20.5,  7.0, 1.5,    # east hall (north door)
+      20.5, -7.0, 1.5,
+      13.5, -7.0, 1.5,    # room S3
+       7.0, -7.0, 1.5,    # room S2 (through the S3<->S2 door)
+       7.0,  0.0, 1.5,
+      -2.0,  0.0, 1.5,
+      -2.0, -6.0, 1.5,    # room S1
+      -2.0,  0.0, 1.5,
+      -3.0,  0.0, 1.5,
+      -3.0,  8.0, 1.5,    # room N1
+      -3.0,  0.0, 1.5,
+       0.0,  0.0, 1.5     # start (loop closure)
+    ]
