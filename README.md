@@ -1,190 +1,161 @@
 # Drone SLAM – ROS 2 Jazzy + Gazebo Harmonic + RTAB-Map
 
-Dron i simuluar me lidar 3D (16 rreze) dhe IMU në një ndërtesë 32×22 m (`worlds/shtepia.sdf`):
-një korridor në mes, 3 dhoma në veri, 3 në jug dhe një sallë e madhe në lindje, me dyer 1.6 m.
-RTAB-Map ndërton hartën 3D dhe vlerëson pozicionin vetëm nga lidar-i.
-Ju e drejtoni dronin, ruani hartën (PCD + PGM/YAML) dhe pastaj e përdorni për lokalizim
-dhe për ta dërguar dronin te destinacione me rrugë që i anashkalojnë muret.
+Simulated drone with a 3D lidar and IMU in a 32×22 m building (`worlds/home.sdf`).
+RTAB-Map builds a 3D map from the lidar, then localizes the drone in it.
+Everything runs in the Docker container `drone-slam-dev` (`~/drone-slam` → `/workspace`).
 
-Gjithçka ekzekutohet brenda kontejnerit `drone-slam-dev` (`~/drone-slam` → `/workspace`).
-
----
-
-## Me një komandë: `./drone` (Terminal në Mac, nga dosja `drone-slam`)
+## Setup
 
 ```bash
-./drone start dhoma1     # hartë e re: Gazebo + RViz + SLAM, hapet shfletuesi
-./drone fluturo          # dritarja e tastierës në shfletues (disa taste njëkohësisht)
-./drone ruaj             # ruan map.pcd + map.pgm
-./drone ndal             # ndal simulimin dhe kontejnerin
-
-./drone lokalizim         # harta shtepia, droni në fillim të korridorit (RViz: 2D Pose Estimate, pastaj 2D Goal Pose)
-./drone demo | ngrihu | ulu | pamja | status | log | ndihmë
+task docker:build   # build image drone-slam:jazzy, create container
+task build          # colcon build inside the container
 ```
 
----
+## Commands
 
-## Rrjedha kryesore me task-e në VS Code
-
-`Cmd+Shift+P` → **Tasks: Run Task**:
-
-| Hapi | Task | Çfarë bën |
-|---|---|---|
-| 1 | **1. Hartografim: Nis** | Pyet për emrin e hartës (p.sh. `dhoma1`). Hap shfletuesin me RViz (+Gazebo). |
-| – | *fluturoni* | Me tastierë (shih më poshtë) **ose** me **2D Goal Pose** në RViz. Kaloni nëpër gjithë dhomën. |
-| 2 | **2. Hartografim: Ruaj hartën** | Ruan hartën pa e ndalur simulimin (mund ta përsërisni). |
-| 3 | **3. Hartografim: Ruaj dhe ndal** | Ruan hartën dhe ndal simulimin. RTAB-Map ruan `rtabmap.db`. |
-| 4 | **4. Lokalizim: Nis** | Pyet për emrin e hartës dhe vendin ku niset droni. Ngarkon hartën pa krijuar hartë të re. |
-| – | *në RViz* | **2D Pose Estimate**: klikoni ku është droni dhe tërhiqni në drejtimin ku shikon. **2D Goal Pose**: klikoni ku doni të shkojë. |
-| – | **Ndal gjithçka (edhe kontejnerin)** | Ndal simulimin, VNC-në dhe kontejnerin Docker. |
-
-### Tastiera (`task fluturo`)
-
-Hapet dritarja e vogël **"Tastiera e dronit"** poshtë djathtas në shfletues (desktopi VNC).
-Klikoni një herë mbi të, pastaj **mbani disa taste njëkohësisht**: p.sh. ↑ + `q` = para duke u
-kthyer majtas, ↑ + ← = diagonale, ↑ + `u` = para duke u ngritur. Tastet e shtypura ndizen jeshil.
-
-| Tasti | Lëvizja |
+| Command | What it does |
 |---|---|
-| ↑ / ↓ | para / mbrapa |
-| ← / → | majtas / djathtas (anash) |
-| `u` / `d` | lart / poshtë |
-| `q` / `e` | rrotullim majtas / djathtas |
-| `+` / `-` | më shpejt / më ngadalë |
-| hapësirë | ndal |
+| `task run:dron` | Localization on `maps/home`. Drone starts at the corridor entrance. |
+| `task run:map MAP=name` | New map in `maps/name`. |
+| `task run:demo` | Drone flies an automatic mission and builds `maps/demo`. |
+| `task teleop` | Keyboard window in the browser. |
+| `task takeoff` / `task land` | Take off to 1.5 m / land. |
+| `task speed V=1.0` | Change speed while flying (`V` m/s, `VZ` up/down m/s, `YAW` rad/s). |
+| `task save` | Save the current map (`map.pcd`, `map.pgm`). |
+| `task stop` | Stop the simulation and the container. |
+| `task view` | Open Gazebo + RViz (http://localhost:6080/vnc.html). |
+| `task status` | Container, simulation and drone state. |
+| `task shell` | Shell inside the container. |
+| `task test` | C++ unit tests (A* planner, 2D grid). |
 
-Droni lëviz sa i mbani tastet dhe ndalet kur i lëshoni (ose kur klikoni jashtë dritares).
-Krahët e **kuq** të dronit janë përpara.
+`run:*` stays in the foreground. **Ctrl+C** (or `task stop` in another terminal)
+shuts down all ROS 2 nodes and then stops the container.
+`run:*` does not build: after changing C++ code run `task build` first.
 
-Task-e të tjera: **Dron: Ngrihu / Ulu / Ndalo në vend**, **Teleop: Tastiera**,
-**Info: Gabimi i SLAM-it**, **Sim: Ndal**, **Terminal: Hyr në kontejner**.
-`Cmd+Shift+B` nis demon me mision automatik.
+`task run:dron` options: `MAP=home X=-6.5 Y=-0.6 YAW=0.0`.
 
-Pamja: **http://localhost:6080/vnc.html** (hapet vetë). Dritaret hapen të maksimizuara;
-kaloni nga RViz te Gazebo nga shiriti poshtë.
+### Drone speed
 
-### Çfarë ruhet te `maps/<emri>/`
+- Default: edit `src/drone_control/config/controller.yaml` (`max_speed`, `max_vertical_speed`, `max_yaw_rate`), then `task run:dron`.
+- While flying: `task speed V=1.5` or `ros2 param set /drone_node max_speed 1.5`.
+- Mission waypoints: `src/drone_control/config/mission.yaml`.
 
-| Skedari | Formati | Përdorimi |
-|---|---|---|
-| `map.pcd` | PCD ASCII (x y z), **pa tokë** | Harta 3D për t'u parë: CloudCompare, PCL, `pcl_viewer` |
-| `map_full.pcd` | PCD ASCII (x y z), me tokë | Harta 3D e plotë (lokalizues 3D si NDT kanë nevojë për tokën) |
-| `map.pgm` + `map.yaml` | Formati i Nav2 `map_server`, **pa tokë (i filtruar)** | Harta 2D e pastër: e bardhë = e lirë, e zezë = mure/objekte |
-| `map_full.pgm` + `map_full.yaml` | Formati i Nav2 `map_server`, pa filtrim | Harta 2D e papërpunuar (pengesat 0.3–3 m mbi dysheme) |
-| `rtabmap.db` | Databaza RTAB-Map | Lokalizimi në këtë projekt (`mode:=localization`) |
-| `map_info.yaml` | YAML | Ku ishte origjina e hartës në botën e Gazebo |
+### In RViz
 
-Hartat bëhen në `shtepia.sdf`. Lokalizimi e hap vetë botën ku është bërë harta (shënohet te `map_info.yaml`).
+- **2D Goal Pose** – click where the drone should go. It takes off and flies around walls.
+- **2D Pose Estimate** – only if "SLAM" (orange) drifts away from "Drone (Gazebo)" (cyan).
 
-### Lokalizim (`task lokalizim`)
+### Keyboard (`task teleop`)
 
-Përdor gjithmonë hartën `maps/shtepia/`. Droni del në **fillim të korridorit** (x = -6.5, y = -0.6,
-i kthyer nga korridori) dhe **initial pose i jepet RTAB-Map-it vetë** (`initial_pose.py`, pret derisa
-harta të ngarkohet dhe kontrollon me TF që u pranua).
+| Key | Motion |
+|---|---|
+| ↑ / ↓ | forward / back |
+| ← / → | left / right |
+| `u` / `d` | up / down |
+| `q` / `e` | turn left / right |
+| `+` / `-` | faster / slower |
+| space | stop |
 
-Në RViz ka dy drone: **"Droni (Gazebo)"** (cian, i tejdukshëm) = ku është vërtet, **"SLAM"**
-(portokalli) = ku mendon SLAM-i se është. Duhet të jenë njëri mbi tjetrin.
-
-1. **2D Goal Pose**: klikoni ku të shkojë dhe tërhiqni për drejtimin. Droni ngrihet vetë, gjen rrugën
-   rreth mureve dhe nëpër dyer (vija portokalli) dhe qëndron pezull atje. Goal i ri sa herë të doni.
-2. Vetëm nëse "SLAM" largohet nga "Droni (Gazebo)": **2D Pose Estimate** mbi dronin cian,
-   tërhiqni në drejtimin ku shikon.
-
-Destinacioni duhet të jetë të paktën 0.6 m larg mureve. Hartë/vend tjetër: `task lokalizim MAP=emri X=.. Y=.. YAW=..`.
-
----
-
-## Me komanda (pa VS Code)
+## ROS 2 run
 
 ```bash
-docker start drone-slam-dev
-docker exec -it drone-slam-dev bash
-# brenda:
-cd /workspace && colcon build --symlink-install && source install/setup.bash
-ros2 run drone_slam start_vnc.sh && export DISPLAY=:1
-
-# 1) hartografim
-ros2 launch drone_slam slam_sim.launch.py mode:=mapping map_name:=dhoma1
-#    terminal tjetër: DISPLAY=:1 ros2 run drone_slam drone_teleop.py   (dritare në VNC)
-# 2) ruaj (terminal tjetër), pastaj Ctrl+C te launch-i
-ros2 run drone_slam map_saver.py --ros-args -p output_dir:=/workspace/maps/dhoma1
-# 3) lokalizim (droni niset te (5,-4.5) i kthyer 90°)
-ros2 launch drone_slam slam_sim.launch.py mode:=localization map_name:=dhoma1 spawn_x:=5 spawn_y:=-4.5 spawn_yaw:=1.5708
-
-# komanda për dronin
-ros2 topic pub --once /drone/command std_msgs/msg/String '{data: takeoff}'   # land | hover | mission
-ros2 run drone_slam stop_sim.sh       # ndal simulimin
+ros2 launch drone_bringup slam_sim.launch.py mode:=localization map_name:=home spawn_x:=-6.5 spawn_y:=-0.6
+ros2 launch drone_bringup slam_sim.launch.py mode:=mapping map_name:=map1
+ros2 run drone_control drone_teleop.py
+ros2 run drone_slam map_saver.py --ros-args -p output_dir:=/workspace/maps/map1
+ros2 topic pub --once /drone/command std_msgs/msg/String '{data: shutdown}'
 ```
 
-### Argumentet e launch-it
+Each package can also be launched on its own:
 
-| Argumenti | Parazgjedhja | Përshkrimi |
+```bash
+ros2 launch drone_sim sim.launch.py world:=home.sdf
+ros2 launch drone_slam mapping.launch.py database_path:=/workspace/maps/map1/rtabmap.db
+ros2 launch drone_localization localization.launch.py database_path:=/workspace/maps/home/rtabmap.db
+ros2 launch drone_control control.launch.py
+```
+
+| Launch argument | Default | Meaning |
 |---|---|---|
-| `mode` | `demo` | `demo` (mision automatik), `mapping`, `localization` |
-| `map_name` | `demo` / `map` | Dosja te `maps/` |
-| `spawn_x`, `spawn_y`, `spawn_yaw` | `0`, `0`, `0` | Ku shfaqet droni në Gazebo (yaw në radianë) |
-| `gui` | `true` | Dritarja e Gazebo (`false` = vetëm RViz, më shpejt) |
+| `mode` | `demo` | `demo`, `mapping`, `localization` |
+| `map_name` | `demo` / `map` | Folder under `maps/` |
+| `spawn_x`, `spawn_y`, `spawn_yaw` | `0` | Start pose in Gazebo (yaw in rad) |
+| `gui` | `true` | Gazebo window |
 | `rviz` | `true` | RViz2 |
+| `auto_initial_pose` | `true` | Localization: send start pose to RTAB-Map automatically |
 
----
+## Packages and nodes
 
-## Si funksionon
+| Package | Node | Language | Role |
+|---|---|---|---|
+| `drone_sim` | Gazebo, `create`, `parameter_bridge` | – | World, drone spawn, ROS ↔ Gazebo bridge, sensor TF |
+| `drone_slam` | `icp_odometry`, `rtabmap` | RTAB-Map | Lidar odometry and mapping |
+| | `slam_evaluator` | C++ | SLAM error vs. Gazebo ground truth, CSV in `results/` |
+| | `map_saver.py` | Python | Writes `map.pcd`, `map.pgm/yaml` |
+| | `map_filter.py` | Python | Floor-free 3D map and clean 2D map for RViz |
+| `drone_localization` | `icp_odometry`, `rtabmap` | RTAB-Map | Localization in a saved map |
+| | `initial_pose` | C++ | Sends the start pose to RTAB-Map |
+| `drone_control` | `drone_node` | C++ | Flight controller: takeoff/land, A* path to goals, teleop, mission |
+| | `drone_teleop.py` | Python | Keyboard window |
+| `drone_bringup` | `slam_sim.launch.py` | – | Starts everything for `demo`, `mapping`, `localization` |
+| | `drone_model` | C++ | Drone markers in RViz (SLAM and ground truth) |
 
-```
-Gazebo (shtepia + slam_drone) ─────/lidar/points, /imu, /odom_gt──► ros_gz_bridge
-          ▲                                                              │
-          │ /cmd_vel                                                     ▼
-     drone_node ◄── /goal_pose, /drone/command, /cmd_vel_teleop    RTAB-Map
-     (A* në hartën 2D, ndjek rrugën)  ◄── /cloud_map ────────────  icp_odometry → rtabmap
-          │                                                        /odom, /cloud_map, TF
-          └─► /planned_path, /planning_map, /mission/state
-```
+## Topics
 
-- **TF:** `map → odom → base_link → {lidar_link, imu_link}`, plus `map → world` (Gazebo).
-- **drone_node:**
-  - Gjendjet: `IDLE → TAKEOFF → GOTO | MISSION → LANDING`.
-  - Tastiera ka gjithmonë përparësi.
-  - Për destinacionet planifikon rrugë me A* mbi hartën 2D (pengesat fryhen 0.5 m).
-  - Nëse droni është në tokë, ngrihet fillimisht.
-- **Lokalizimi:** RTAB-Map në `Mem/IncrementalMemory=false`. Pa pozicion fillestar supozon origjinën e hartës. **2D Pose Estimate** (`/initialpose`) ia jep pozicionin e saktë, pastaj ICP-ja e rafinon kundrejt hartës.
-- **slam_evaluator:**
-  - Krahason SLAM-in me pozicionin e vërtetë.
-  - Rezultatet ruhen te `results/*.csv`.
-  - Statistikat rinisin me çdo pozicion fillestar të ri.
+| Topic | Type | Meaning |
+|---|---|---|
+| `/lidar/points` | `sensor_msgs/PointCloud2` | 3D lidar |
+| `/imu` | `sensor_msgs/Imu` | IMU |
+| `/odom_gt` | `nav_msgs/Odometry` | Ground truth from Gazebo (not used by SLAM) |
+| `/odom` | `nav_msgs/Odometry` | Lidar odometry |
+| `/cloud_map` | `sensor_msgs/PointCloud2` | RTAB-Map 3D map |
+| `/cloud_map_filtered` | `sensor_msgs/PointCloud2` | 3D map without floor |
+| `/map_filtered` | `nav_msgs/OccupancyGrid` | Clean 2D map |
+| `/planning_map` | `nav_msgs/OccupancyGrid` | 2D grid used by A* |
+| `/planned_path` | `nav_msgs/Path` | Route to the goal |
+| `/gt_path` | `nav_msgs/Path` | Flown path |
+| `/goal_pose` | `geometry_msgs/PoseStamped` | Goal (RViz 2D Goal Pose) |
+| `/initialpose` | `geometry_msgs/PoseWithCovarianceStamped` | Start pose for localization |
+| `/cmd_vel_teleop` | `geometry_msgs/Twist` | Keyboard command (priority) |
+| `/cmd_vel` | `geometry_msgs/Twist` | Velocity to Gazebo |
+| `/drone/command` | `std_msgs/String` | `takeoff`, `land`, `hover`, `mission`, `shutdown` |
+| `/mission/state` | `std_msgs/String` | `IDLE`, `TAKEOFF`, `GOTO`, `MISSION`, `LANDING` |
+| `/slam/position_error` | `std_msgs/Float64` | SLAM error in m |
+| `/drone_model`, `/drone_model_gt` | `visualization_msgs/MarkerArray` | Drone in RViz |
 
-### Rezultatet e testeve
-| Testi | Gabimi i SLAM-it |
+TF: `map → odom → base_link → {lidar_link, imu_link}`, `map → world`.
+
+## Saved map (`maps/<name>/`)
+
+| File | Content |
 |---|---|
-| Hartografim, 6 destinacione rreth dhomës (pas ngritjes) | RMSE 8.5 cm, maks 17 cm |
-| Lokalizim, nisje te (5,−4.5, 90°) + 2 destinacione | 2.7 cm në fund |
+| `map.pcd` / `map_full.pcd` | 3D map without / with floor (ASCII PCD) |
+| `map.pgm` + `map.yaml` | Filtered 2D map (Nav2 format) |
+| `map_full.pgm` + `map_full.yaml` | Unfiltered 2D map |
+| `rtabmap.db` | RTAB-Map database, used for localization |
+| `map_info.yaml` | World and map origin |
 
----
-
-## Struktura
+## Layout
 
 ```
-models/slam_drone/          dron (VelocityControl, lidar 3D, IMU, odometri e vërtetë)
-worlds/shtepia.sdf          ndërtesa me dhoma (bota e paracaktuar, droni shfaqet nga launch-i)
-worlds/slam_world.sdf       dhoma e vjetër 24×16 m (nuk përdoret më si parazgjedhje)
-maps/<emri>/                hartat e ruajtura
-results/                    CSV-të e vlerësimit
-src/drone_slam/
-  src/drone_node.cpp        kontrolluesi: mision, destinacione + A*, komanda, teleop
-  scripts/map_saver.py      ruan map.pcd + map.pgm/yaml
-  scripts/drone_teleop.py   dritarja e tastierës (disa taste njëkohësisht)
-  scripts/sync_check.sh     (në Mac) rinis kontejnerin nëse Docker shërben skedarë të vjetër
-  scripts/slam_evaluator.py gabimi i SLAM-it
-  scripts/start_vnc.sh      desktop virtual + noVNC (porti 6080)
-  scripts/stop_sim.sh       ndal simulimin (RTAB-Map ruan databazën)
-  launch/slam_sim.launch.py
-  config/                   gz_bridge.yaml, rtabmap.yaml, mission.yaml
-  rviz/slam.rviz
-.vscode/tasks.json          task-et
+worlds/home.sdf           building
+models/slam_drone/        drone (lidar, IMU, velocity control)
+maps/                     saved maps
+results/                  SLAM error CSV
+src/
+  drone_sim/              launch/sim.launch.py, config/gz_bridge.yaml
+  drone_slam/             launch/mapping.launch.py, config/rtabmap.yaml, slam_evaluator, map_saver, map_filter
+  drone_localization/     launch/localization.launch.py, initial_pose
+  drone_control/          launch/control.launch.py, config/controller.yaml + mission.yaml, drone_node, drone_teleop, test/
+  drone_bringup/          launch/slam_sim.launch.py, rviz/slam.rviz, drone_model, start_vnc.sh, sync_check.sh
+taskfile.yml              tasks
+Dockerfile                image
 ```
 
-## Shënime
-- **Droni është kinematik:** shpejtësia vendoset drejtpërdrejt dhe graviteti është i çaktivizuar. Nuk ka PX4.
-- **Kontrolli i fluturimit** përdor pozicionin e vërtetë nga Gazebo, që gabimet e SLAM-it të mos e prishin fluturimin.
-- **Ngjitjet ndalen ngadalë (0.25 m/s):** muret vertikale i japin ICP-së pak informacion për lartësinë.
-- **"Live Lidar" në RViz është i çaktivizuar** si parazgjedhje. Pikat e lidar-it hidhen shpesh sepse TF-ja e odometrisë vjen me vonesë. Aktivizojeni me një klik nëse ju duhet.
-- **Docker Desktop në Mac ndonjëherë shërben version të vjetër** të një skedari të sapondryshuar. Task-et e kontrollojnë dhe e rinisin kontejnerin vetë. Me dorë: `bash src/drone_slam/scripts/sync_check.sh` ose `docker restart drone-slam-dev`.
+C++ packages follow the same layout:
+
+```
+include/<package>/<node>.hpp   class declaration
+src/<node>.cpp                 implementation
+src/main.cpp                   rclcpp::init, spin, shutdown
+```

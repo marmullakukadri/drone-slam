@@ -1,26 +1,20 @@
-# ---- ROS 2 / colcon: krijohen nga "task build"
 build/
 install/
 log/
 
-# ---- Rezultatet e simulimit (krijohen gjatë ekzekutimit)
 maps/
 results/
 
-# ---- Editorët (cilësime personale)
 .vscode/
 .idea/
 *.code-workspace
 *.swp
 *~
 
-# ---- Python
 __pycache__/
 *.pyc
 .pytest_cache/
 
-# ---- Task (taskfile.dev) cache
 .task/
 
-# ---- macOS
 .DS_Store

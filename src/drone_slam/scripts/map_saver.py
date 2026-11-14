@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""Save the current RTAB-Map maps to disk.
-
-Writes into <output_dir>:
-  map.pcd    3D point cloud map without the floor (PCD x y z, ASCII;
-             -p pcd_binary:=true for binary, -p remove_ground:=false keeps the floor)
-  map_full.pcd  the same map with the floor (lidar localization such as NDT
-             needs the floor to fix height / roll / pitch)
-  map.pgm    2D occupancy grid image          } Nav2 map_server format, filtered:
-  map.yaml   2D occupancy grid metadata       } floor removed, non-ground points up to
-                                                obstacle_max_z = occupied (black), the
-                                                explored area inside the walls = free
-                                                (white), the rest unknown (grey)
-  map_full.pgm + map_full.yaml  the same grid without filtering: points in
-             [obstacle_min_z, obstacle_max_z] = occupied, floor points = free
-(rtabmap.db, used for localization, is written by RTAB-Map itself on shutdown.)
-
-/cloud_map is latched (transient local) by RTAB-Map, so this works at any
-time while mapping or localization is running.
-
-Usage: ros2 run drone_slam map_saver.py --ros-args -p output_dir:=/workspace/maps/room1
-"""
 import os
 import sys
 
@@ -34,15 +13,6 @@ from sensor_msgs_py import point_cloud2
 
 def ground_mask(pts: np.ndarray, cell: float = 0.5, max_floor_z: float = 0.2,
                 clearance: float = 0.2) -> np.ndarray:
-    """True for floor points.
-
-    The SLAM height drifts a little (the floor shows up from about -0.35 to
-    0.0 m in map frame instead of one flat plane), so a single height cut
-    would either leave floor patches or cut the bottom of walls. Instead the
-    floor height is estimated per cell x cell m tile (5th percentile of the
-    points below max_floor_z) and everything up to floor + clearance in that
-    tile is ground. Tiles without low points have no ground.
-    """
     ix = np.floor(pts[:, 0] / cell).astype(np.int64)
     iy = np.floor(pts[:, 1] / cell).astype(np.int64)
     tile = (ix - ix.min()) * (iy.max() - iy.min() + 1) + (iy - iy.min())
@@ -57,18 +27,10 @@ def ground_mask(pts: np.ndarray, cell: float = 0.5, max_floor_z: float = 0.2,
 
 
 def remove_ground(pts: np.ndarray, **kw) -> np.ndarray:
-    """The points that are not floor (see ground_mask)."""
     return pts[~ground_mask(pts, **kw)]
 
 
 def save_pcd(pts: np.ndarray, path: str, ascii_format: bool = True) -> int:
-    """Write x y z as PCD v0.7.
-
-    ASCII by default: it opens in every viewer (CloudCompare, pcl_viewer,
-    VS Code extensions, online viewers); binary is smaller but many simple
-    viewers cannot read it. Colors are left out on purpose - viewers color
-    the cloud by height themselves, and packed-float rgb confuses several.
-    """
     pts = np.ascontiguousarray(pts, dtype=np.float32)
     n = pts.shape[0]
     header = (
@@ -97,20 +59,6 @@ def _disk(radius: int) -> np.ndarray:
 def build_grid(pts: np.ndarray, res: float, max_floor_z: float, zmax: float,
                min_height: float = 0.3, min_blob: int = 12, max_hole_m2: float = 2.0,
                small_obj_m: float = 1.0, gap_m: float = 0.3):
-    """2D occupancy grid (uint8 image, row 0 = min y) + its origin (x0, y0).
-
-    occupied (0)  : points between min_height above the local floor (see
-                    ground_mask; same 0.3 m rule as the drone_node planner,
-                    drops flat leftovers of the floor) and zmax, with 1-cell
-                    gaps closed, isolated specks (< min_blob cells) removed,
-                    small objects (<= small_obj_m, e.g. a pillar seen from one
-                    side only as a "C") closed and filled, and the hollow inside
-                    of pillars / crates (< max_hole_m2) filled
-    free (254)    : the explored area: floor + obstacle cells, gaps up to
-                    gap_m closed, everything enclosed by it filled, minus
-                    the occupied cells
-    unknown (205) : everything else
-    """
     x0, y0 = pts[:, 0].min() - 1.0, pts[:, 1].min() - 1.0
     w = int(np.ceil((pts[:, 0].max() + 1.0 - x0) / res))
     h = int(np.ceil((pts[:, 1].max() + 1.0 - y0) / res))
@@ -141,7 +89,7 @@ def build_grid(pts: np.ndarray, res: float, max_floor_z: float, zmax: float,
     holes, n = ndimage.label(~occ)
     sizes = ndimage.sum(~occ, holes, np.arange(1, n + 1))
     small = np.r_[False, sizes <= max_hole_m2 / res ** 2]
-    small[holes[0, :]] = small[holes[-1, :]] = False        # never the outside
+    small[holes[0, :]] = small[holes[-1, :]] = False
     small[holes[:, 0]] = small[holes[:, -1]] = False
     occ |= small[holes]
 
@@ -152,14 +100,13 @@ def build_grid(pts: np.ndarray, res: float, max_floor_z: float, zmax: float,
     seen = ndimage.binary_closing(seen, structure=_disk(r), border_value=0)
     seen = ndimage.binary_fill_holes(seen)
 
-    img = np.full((h, w), 205, dtype=np.uint8)          # unknown
-    img[seen] = 254                                     # free
-    img[occ] = 0                                        # occupied
+    img = np.full((h, w), 205, dtype=np.uint8)
+    img[seen] = 254
+    img[occ] = 0
     return img, x0, y0
 
 
 def build_grid_full(pts: np.ndarray, res: float, zmin: float, zmax: float):
-    """Unfiltered grid: points in [zmin, zmax] occupied, lower points free."""
     x0, y0 = pts[:, 0].min() - 1.0, pts[:, 1].min() - 1.0
     w = int(np.ceil((pts[:, 0].max() + 1.0 - x0) / res))
     h = int(np.ceil((pts[:, 1].max() + 1.0 - y0) / res))
@@ -167,9 +114,9 @@ def build_grid_full(pts: np.ndarray, res: float, zmin: float, zmax: float):
     cy = np.clip(((pts[:, 1] - y0) / res).astype(int), 0, h - 1)
     obstacle = (pts[:, 2] >= zmin) & (pts[:, 2] <= zmax)
     floor = pts[:, 2] < zmin
-    img = np.full((h, w), 205, dtype=np.uint8)        # unknown
-    img[cy[floor], cx[floor]] = 254                   # free
-    img[cy[obstacle], cx[obstacle]] = 0               # occupied (wins over free)
+    img = np.full((h, w), 205, dtype=np.uint8)
+    img[cy[floor], cx[floor]] = 254
+    img[cy[obstacle], cx[obstacle]] = 0
     return img, x0, y0
 
 
@@ -180,7 +127,7 @@ def save_grid(pts: np.ndarray, pgm_path: str, yaml_path: str,
     else:
         img, x0, y0 = build_grid_full(pts, res, zmin, zmax)
     h, w = img.shape
-    img = np.flipud(img)                                # image row 0 = max y
+    img = np.flipud(img)
     with open(pgm_path, 'wb') as f:
         f.write(f'P5\n# drone_slam map_saver\n{w} {h}\n255\n'.encode('ascii'))
         f.write(img.tobytes())

@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Floor-filtered copies of the live RTAB-Map map, for RViz.
-
-  /cloud_map  ->  /cloud_map_filtered   3D map without the floor (= map.pcd)
-              ->  /map_filtered         clean 2D occupancy grid    (= map.pgm)
-
-Same filtering as map_saver.py (ground_mask / build_grid), so RViz shows what
-"task ruaj" saves. Both outputs are latched (transient local). The planner in
-drone_node keeps using /cloud_map.
-"""
 import time
 
 import numpy as np
@@ -27,7 +18,7 @@ class MapFilter(Node):
         self.res = self.declare_parameter('grid_resolution', 0.1).value
         self.zmin = self.declare_parameter('obstacle_min_z', 0.2).value
         self.zmax = self.declare_parameter('obstacle_max_z', 3.0).value
-        self.period = self.declare_parameter('min_period', 2.0).value  # s between updates
+        self.period = self.declare_parameter('min_period', 2.0).value
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                          reliability=ReliabilityPolicy.RELIABLE)
         self.cloud_pub = self.create_publisher(PointCloud2, 'cloud_map_filtered', qos)
@@ -37,7 +28,7 @@ class MapFilter(Node):
         self.create_timer(0.5, self.process)
 
     def on_cloud(self, msg):
-        self.pending = msg          # keep only the newest map
+        self.pending = msg
 
     def process(self):
         if self.pending is None or time.monotonic() - self.last < self.period:
@@ -58,10 +49,10 @@ class MapFilter(Node):
         grid.info.height, grid.info.width = img.shape
         grid.info.origin.position.x, grid.info.origin.position.y = float(x0), float(y0)
         grid.info.origin.orientation.w = 1.0
-        data = np.full(img.shape, -1, dtype=np.int8)     # 205 = unknown
-        data[img == 254] = 0                             # free
-        data[img == 0] = 100                             # occupied
-        grid.data = data.ravel().tolist()                # row 0 = min y, as build_grid
+        data = np.full(img.shape, -1, dtype=np.int8)
+        data[img == 254] = 0
+        data[img == 0] = 100
+        grid.data = data.ravel().tolist()
         self.grid_pub.publish(grid)
 
 
@@ -77,7 +68,7 @@ def main():
             node.destroy_node()
             if rclpy.ok():
                 rclpy.shutdown()
-        except KeyboardInterrupt:   # second Ctrl+C / SIGINT from "task ndal"
+        except KeyboardInterrupt:
             pass
 
 

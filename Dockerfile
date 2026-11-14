@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y \
     websockify \
     && rm -rf /var/lib/apt/lists/*
 
-# SLAM stack + desktop helpers (added for the drone_slam package)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-rtabmap-ros \
-    ros-jazzy-teleop-twist-keyboard \
+    ros-jazzy-rviz2 \
     ros-jazzy-tf2-tools \
+    python3-tk \
+    python3-scipy \
     fluxbox \
     xterm \
     mesa-utils \

@@ -1,16 +1,7 @@
 <?xml version="1.0"?>
-<!--
-  slam_drone: kinematic quadcopter for SLAM.
-  - Gravity disabled on base_link; motion comes from the VelocityControl
-    system (body-frame Twist on gz topic /model/<name>/cmd_vel).
-  - Ground-truth odometry: /model/<name>/odometry (used only by the mission
-    controller and for comparison; SLAM never sees it).
-  - Sensors: 16-beam 3D lidar (/lidar/points) and IMU (/imu).
--->
 <sdf version="1.9">
   <model name="slam_drone">
     <static>false</static>
-
     <link name="base_link">
       <gravity>false</gravity>
       <inertial>
@@ -20,11 +11,9 @@
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
-
       <collision name="body_collision">
         <geometry><box><size>0.30 0.20 0.10</size></box></geometry>
       </collision>
-      <!-- Landing skids carry the drone on the ground (bottom 0.098 m below base_link) -->
       <collision name="skid_left_collision">
         <pose>0 0.09 -0.09 0 0 0</pose>
         <geometry><box><size>0.24 0.016 0.016</size></box></geometry>
@@ -33,9 +22,6 @@
         <pose>0 -0.09 -0.09 0 0 0</pose>
         <geometry><box><size>0.24 0.016 0.016</size></box></geometry>
       </collision>
-
-      <!-- ================= Visuals (x = forward; front arms are red) ================= -->
-      <!-- Body shell, top stripe, battery -->
       <visual name="body_shell">
         <geometry><ellipsoid><radii>0.13 0.085 0.04</radii></ellipsoid></geometry>
         <material>
@@ -53,8 +39,6 @@
         <geometry><box><size>0.14 0.07 0.03</size></box></geometry>
         <material><ambient>0.25 0.25 0.28 1</ambient><diffuse>0.25 0.25 0.28 1</diffuse></material>
       </visual>
-
-      <!-- Arms: front (red), rear (carbon) -->
       <visual name="arm_fl">
         <pose>0.088 0.088 0 0 1.5708 0.7854</pose>
         <geometry><cylinder><radius>0.012</radius><length>0.25</length></cylinder></geometry>
@@ -75,8 +59,6 @@
         <geometry><cylinder><radius>0.012</radius><length>0.25</length></cylinder></geometry>
         <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
       </visual>
-
-      <!-- Motors -->
       <visual name="motor_fl">
         <pose>0.177 0.177 0.015 0 0 0</pose>
         <geometry><cylinder><radius>0.022</radius><length>0.035</length></cylinder></geometry>
@@ -97,9 +79,6 @@
         <geometry><cylinder><radius>0.022</radius><length>0.035</length></cylinder></geometry>
         <material><ambient>0.45 0.45 0.48 1</ambient><diffuse>0.55 0.55 0.58 1</diffuse><specular>0.9 0.9 0.9 1</specular></material>
       </visual>
-
-      <!-- Propeller blades are separate spinning links (see prop_* below);
-           the translucent discs give a motion-blur look while they spin. -->
       <visual name="disc_fl">
         <pose>0.177 0.177 0.036 0 0 0</pose>
         <transparency>0.75</transparency>
@@ -124,8 +103,6 @@
         <geometry><cylinder><radius>0.12</radius><length>0.002</length></cylinder></geometry>
         <material><ambient>0.8 0.8 0.85 1</ambient><diffuse>0.8 0.8 0.85 1</diffuse></material>
       </visual>
-
-      <!-- Navigation LEDs: left = red, right = green -->
       <visual name="led_fl">
         <pose>0.177 0.177 -0.008 0 0 0</pose>
         <geometry><sphere><radius>0.01</radius></sphere></geometry>
@@ -146,8 +123,6 @@
         <geometry><sphere><radius>0.01</radius></sphere></geometry>
         <material><ambient>0 1 0 1</ambient><diffuse>0 1 0 1</diffuse><emissive>0 1 0 1</emissive></material>
       </visual>
-
-      <!-- Front camera gimbal -->
       <visual name="camera_gimbal">
         <pose>0.12 0 -0.03 0 0 0</pose>
         <geometry><sphere><radius>0.022</radius></sphere></geometry>
@@ -158,8 +133,6 @@
         <geometry><cylinder><radius>0.012</radius><length>0.012</length></cylinder></geometry>
         <material><ambient>0.05 0.1 0.3 1</ambient><diffuse>0.1 0.2 0.5 1</diffuse><specular>1 1 1 1</specular></material>
       </visual>
-
-      <!-- 3D lidar unit on a short mast (sensor origin at z = 0.10) -->
       <visual name="lidar_mast">
         <pose>0 0 0.055 0 0 0</pose>
         <geometry><cylinder><radius>0.018</radius><length>0.04</length></cylinder></geometry>
@@ -180,8 +153,6 @@
         <geometry><cylinder><radius>0.042</radius><length>0.005</length></cylinder></geometry>
         <material><ambient>0.5 0.5 0.52 1</ambient><diffuse>0.6 0.6 0.62 1</diffuse></material>
       </visual>
-
-      <!-- Landing gear: 4 legs + 2 skids (skid bottom ~0.098 m below base_link) -->
       <visual name="leg_fl">
         <pose>0.05 0.085 -0.06 0 0 0</pose>
         <geometry><cylinder><radius>0.006</radius><length>0.06</length></cylinder></geometry>
@@ -212,15 +183,12 @@
         <geometry><cylinder><radius>0.008</radius><length>0.24</length></cylinder></geometry>
         <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
       </visual>
-
       <sensor name="imu_sensor" type="imu">
         <always_on>true</always_on>
         <update_rate>100</update_rate>
         <topic>/imu</topic>
         <gz_frame_id>imu_link</gz_frame_id>
       </sensor>
-
-      <!-- 3D lidar, 0.10 m above base_link (matches static TF in launch) -->
       <sensor name="lidar_sensor" type="gpu_lidar">
         <pose>0 0 0.10 0 0 0</pose>
         <always_on>true</always_on>
@@ -243,7 +211,6 @@
             </vertical>
           </scan>
           <range>
-            <!-- 0.4 m: ignore the drone's own propellers (reach ~0.37 m) -->
             <min>0.4</min>
             <max>30.0</max>
             <resolution>0.01</resolution>
@@ -256,12 +223,6 @@
         </lidar>
       </sensor>
     </link>
-
-    <!-- ================= Spinning propellers =================
-         Each blade is its own link on a revolute joint. All four JointController
-         systems listen to gz topic /drone/prop_speed (rad/s, bridged from ROS
-         /drone/prop_speed, published by drone_node: spinning while flying).
-         Diagonal pairs turn the same way (axis +z = CCW, -z = CW). -->
     <link name="prop_fl">
       <pose>0.177 0.177 0.038 0 0 0.3</pose>
       <gravity>false</gravity>
@@ -280,7 +241,6 @@
       <parent>base_link</parent><child>prop_fl</child>
       <axis><xyz>0 0 1</xyz><limit><lower>-1e16</lower><upper>1e16</upper></limit></axis>
     </joint>
-
     <link name="prop_fr">
       <pose>0.177 -0.177 0.038 0 0 1.2</pose>
       <gravity>false</gravity>
@@ -299,7 +259,6 @@
       <parent>base_link</parent><child>prop_fr</child>
       <axis><xyz>0 0 -1</xyz><limit><lower>-1e16</lower><upper>1e16</upper></limit></axis>
     </joint>
-
     <link name="prop_rl">
       <pose>-0.177 0.177 0.038 0 0 -0.5</pose>
       <gravity>false</gravity>
@@ -318,7 +277,6 @@
       <parent>base_link</parent><child>prop_rl</child>
       <axis><xyz>0 0 -1</xyz><limit><lower>-1e16</lower><upper>1e16</upper></limit></axis>
     </joint>
-
     <link name="prop_rr">
       <pose>-0.177 -0.177 0.038 0 0 2.0</pose>
       <gravity>false</gravity>
@@ -337,7 +295,6 @@
       <parent>base_link</parent><child>prop_rr</child>
       <axis><xyz>0 0 1</xyz><limit><lower>-1e16</lower><upper>1e16</upper></limit></axis>
     </joint>
-
     <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
       <joint_name>prop_fl_joint</joint_name>
       <topic>/drone/prop_speed</topic>
@@ -354,10 +311,8 @@
       <joint_name>prop_rr_joint</joint_name>
       <topic>/drone/prop_speed</topic>
     </plugin>
-
     <plugin filename="gz-sim-velocity-control-system"
             name="gz::sim::systems::VelocityControl"/>
-
     <plugin filename="gz-sim-odometry-publisher-system"
             name="gz::sim::systems::OdometryPublisher">
       <dimensions>3</dimensions>
