@@ -4,8 +4,7 @@ import xml.etree.ElementTree as ET
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument,
-                            IncludeLaunchDescription, OpaqueFunction)
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+                            ExecuteProcess, OpaqueFunction, Shutdown)
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -37,10 +36,12 @@ def launch_setup(context):
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', os.path.join(ws, 'models')),
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', os.path.join(ws, 'worlds')),
 
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(
-                get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')),
-            launch_arguments={'gz_args': gz_args, 'on_exit_shutdown': 'true'}.items()),
+        ExecuteProcess(
+            cmd=['gz', 'sim', *gz_args.split(), '--force-version', '8'],
+            name='gazebo', output='screen', on_exit=Shutdown(),
+            additional_env={'GZ_SIM_SYSTEM_PLUGIN_PATH': os.pathsep.join(
+                [os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', ''),
+                 os.environ.get('LD_LIBRARY_PATH', '')])}),
 
         Node(package='ros_gz_sim', executable='create', name='spawn_drone', output='screen',
              arguments=['-world', world_name,

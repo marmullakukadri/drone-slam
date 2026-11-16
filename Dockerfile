@@ -14,9 +14,7 @@ RUN apt-get update && apt-get install -y \
     x11vnc \
     novnc \
     websockify \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     ros-jazzy-rtabmap-ros \
     ros-jazzy-rviz2 \
     ros-jazzy-tf2-tools \
@@ -27,9 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN echo "[ -f /workspace/install/setup.bash ] && source /workspace/install/setup.bash" >> /root/.bashrc
-
-RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc \
+    && echo "[ -f /workspace/install/setup.bash ] && source /workspace/install/setup.bash" >> /root/.bashrc
 
 WORKDIR /workspace
 

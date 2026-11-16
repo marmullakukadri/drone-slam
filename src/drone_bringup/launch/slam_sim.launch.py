@@ -103,7 +103,8 @@ def launch_setup(context):
         _include('drone_control', 'control.launch.py',
                  controller_file=_arg(context, 'controller_file'),
                  mission_file=_arg(context, 'mission_file'),
-                 run_mission='true' if mode == 'demo' else 'false'),
+                 run_mission='true' if mode == 'demo' else 'false',
+                 require_localization='true' if localization else 'false'),
 
         Node(package='drone_bringup', executable='drone_model', name='drone_model',
              output='screen', parameters=[{'workspace': ws, **sim_time}]),

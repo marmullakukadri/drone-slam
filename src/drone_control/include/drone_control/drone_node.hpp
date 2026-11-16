@@ -52,6 +52,7 @@ private:
   void publishZero();
   void publishCmd(geometry_msgs::msg::Twist cmd);
   void controlLoop();
+  bool isLocalized(std::string & why);
   rcl_interfaces::msg::SetParametersResult onSetParameters(
     const std::vector<rclcpp::Parameter> & params);
 
@@ -62,6 +63,10 @@ private:
   bool plan_paths_;
   double inflation_radius_, grid_resolution_, obstacle_min_z_, obstacle_max_z_;
   std::string map_frame_;
+  bool require_localization_;
+  double max_localization_error_;
+  std::optional<double> slam_error_;
+  std::optional<rclcpp::Time> slam_error_time_;
 
   nav_msgs::msg::OccupancyGrid::ConstSharedPtr map_;
   sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_;
@@ -111,6 +116,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr teleop_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr slam_error_sub_;
   rclcpp::TimerBase::SharedPtr grid_timer_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;

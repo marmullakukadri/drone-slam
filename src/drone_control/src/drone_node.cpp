@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <stdexcept>
 
@@ -58,6 +59,8 @@ DroneNode::DroneNode()
   grid_resolution_ = declare_parameter("grid_resolution", 0.1);
   obstacle_min_z_ = declare_parameter("obstacle_min_z", 0.2);
   obstacle_max_z_ = declare_parameter("obstacle_max_z", 3.0);
+  require_localization_ = declare_parameter("require_localization", false);
+  max_localization_error_ = declare_parameter("max_localization_error", 1.0);
   const auto rate_hz = declare_parameter("control_rate", 20.0);
 
   if (wp_flat.size() % 3 != 0 || wp_flat.empty()) {
@@ -107,6 +110,11 @@ DroneNode::DroneNode()
     "drone/command", 10, [this](std_msgs::msg::String::ConstSharedPtr msg) {
       onCommand(msg->data);
     });
+  slam_error_sub_ = create_subscription<std_msgs::msg::Float64>(
+    "/slam/position_error", 10, [this](std_msgs::msg::Float64::ConstSharedPtr msg) {
+      slam_error_ = msg->data;
+      slam_error_time_ = now();
+    });
 
   timer_ = create_wall_timer(
     std::chrono::duration<double>(1.0 / rate_hz), [this]() {controlLoop();});
@@ -146,6 +154,13 @@ void DroneNode::onGoal(const geometry_msgs::msg::PoseStamped & goal_in)
 {
   if (!have_odom_) {
     RCLCPP_WARN(get_logger(), "Goal ignored: no odometry yet");
+    return;
+  }
+  std::string why;
+  if (!isLocalized(why)) {
+    RCLCPP_ERROR(
+      get_logger(), "Goal rejected: drone is not localized (%s) - give \"2D Pose Estimate\" "
+      "in RViz where the drone really is", why.c_str());
     return;
   }
   if (pos_.z() < takeoff_altitude_ - 0.3) {
@@ -344,6 +359,24 @@ bool DroneNode::flyTo(
 }
 
 void DroneNode::publishZero() {cmd_pub_->publish(geometry_msgs::msg::Twist());}
+
+bool DroneNode::isLocalized(std::string & why)
+{
+  if (!require_localization_) {return true;}
+  if (!slam_error_ || (now() - *slam_error_time_).seconds() > 2.0) {
+    why = "no SLAM pose yet";
+    return false;
+  }
+  if (*slam_error_ > max_localization_error_) {
+    char buf[96];
+    std::snprintf(
+      buf, sizeof(buf), "SLAM pose is %.1f m from the real drone, limit %.1f m",
+      *slam_error_, max_localization_error_);
+    why = buf;
+    return false;
+  }
+  return true;
+}
 
 rcl_interfaces::msg::SetParametersResult DroneNode::onSetParameters(
   const std::vector<rclcpp::Parameter> & params)

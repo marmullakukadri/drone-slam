@@ -17,13 +17,16 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('controller_file'),
                     LaunchConfiguration('mission_file'),
                     {'run_mission': ParameterValue(LaunchConfiguration('run_mission'),
-                                                   value_type=bool)}],
+                                                   value_type=bool),
+                     'require_localization': ParameterValue(
+                         LaunchConfiguration('require_localization'), value_type=bool)}],
         remappings=[('odom', '/odom_gt')])
     return LaunchDescription([
         DeclareLaunchArgument('controller_file',
                               default_value=os.path.join(config, 'controller.yaml')),
         DeclareLaunchArgument('mission_file', default_value=os.path.join(config, 'mission.yaml')),
         DeclareLaunchArgument('run_mission', default_value='false'),
+        DeclareLaunchArgument('require_localization', default_value='false'),
         drone_node,
         RegisterEventHandler(OnProcessExit(
             target_action=drone_node,
